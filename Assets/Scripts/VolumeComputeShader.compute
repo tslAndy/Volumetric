@@ -1,0 +1,142 @@
+#pragma kernel CSMain
+
+struct Light 
+{
+    float3 pos;
+    float3 color;
+    float intensity;
+};
+
+
+float step;
+
+float3 cameraPosition;
+float4x4 cameraMatrix;
+uint2 resolution;
+
+float boxSize;
+uint boxResolution;
+
+float schlick_k;
+float scatter;
+
+RWTexture3D<float> noise;
+RWTexture2D<float4> result;
+StructuredBuffer<Light> lights;
+
+#define MAX_DIST    100.0
+#define MAX_STEPS   1000
+#define DIM_CUTOFF  0.01
+
+#define PI          3.14159265359
+#define EPS         0.001  
+
+float lengthSqr(float3 delta)
+{
+    return dot(delta, delta);
+}
+
+float hash(inout uint seed) {
+  uint num = seed++;
+  num = num * 747796405u + 2891336453u;
+  num = ((num >> ((num >> 28u) + 4u)) ^ num) * 277803737u;
+  num = (num >> 22u) ^ num;
+  return float(num) * (1.0 / 4294967296.0);
+}
+
+uint pixelSeed(uint2 id)
+{
+    return uint(id.y * 65171993u + id.x * 11591131u);
+}
+
+float schlick(float ang_cos) 
+{
+    return (1.0 - schlick_k * schlick_k) / 
+    (4.0 * PI * (1.0 - schlick_k * ang_cos) * (1.0 - schlick_k * ang_cos));
+}
+
+float3 TraceLight(float3 pos, float3 mainDir)
+{
+    uint lightsCount, _;
+    lights.GetDimensions(lightsCount, _);
+    
+    float invPos = 1.0 / boxSize * boxResolution;
+
+    float3 accum = 0.0;
+    for (int i = 0; i < lightsCount; i++)
+    {
+        float3 tempPos = pos;
+
+        Light light = lights[i];
+        float3 dir = normalize(light.pos - tempPos);
+
+        float transparency = 1.0;
+        for (int j = 0; j < MAX_STEPS; j++)
+        {
+            if (transparency < DIM_CUTOFF)
+                break;
+
+            int3 cpos = int3(trunc(tempPos * invPos));
+            if (any(cpos < 0) || any(cpos >= boxResolution))
+                break;
+
+            if (lengthSqr(light.pos - tempPos) < step * step)
+                break;
+
+            transparency *= exp(-step * noise[cpos] * scatter);
+            tempPos += dir * step;
+        }
+
+        float distFactor = 2.0 / (lengthSqr(light.pos - tempPos) + 1.0);
+        float3 schlickFactor = schlick(dot(mainDir, dir));
+        
+        accum += transparency * light.intensity * distFactor * schlickFactor * light.color;
+    }
+
+    return accum;
+}
+
+[numthreads(8,8,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    if (any(id.xy >= resolution))
+        return;
+
+    uint seed = pixelSeed(id.xy);
+    
+    float3 pos = cameraPosition;
+    float3 dir = mul(cameraMatrix, float4(id.xy + float2(0.5, 0.5), 1.0, 1.0));
+    float dist = 0.0;
+
+    float invPos = 1.0 / boxSize * boxResolution;
+
+    float transparency = 1.0;
+    float3 accum = 0.0;
+
+    for (int i = 0; i < MAX_STEPS; i++)
+    {
+        if (dist > MAX_DIST)
+            break;
+
+        if (transparency < DIM_CUTOFF)
+            break;
+
+        pos += dir * step;
+        dist += step;
+
+        int3 cpos = int3(trunc(pos * invPos));
+        if (any(cpos < 0) || any(cpos >= boxResolution))
+            continue;
+
+        float noiseVal = noise[cpos];
+        if (noise[cpos] < EPS)
+            continue;
+
+        float3 randOffset = hash(seed) * step * dir;
+        float3 light = step * TraceLight(pos + randOffset, dir);
+        accum += transparency * light;
+        transparency *= exp(-step * noise[cpos]);
+    }
+
+    result[id.xy] = float4(accum, 1.0);
+}

@@ -1,0 +1,182 @@
+#pragma kernel CSMain
+
+
+uint resolution;
+StructuredBuffer<int> voxels;
+RWTexture3D<float> noise;
+
+float time;
+float3 noiseVel;
+
+float invWorleyFreq, invPerlinFreq, worleyPerlinLerp;
+
+static float3 perlinDirs[14] =
+{ 
+    float3(0.5774, 0.5774, 0.5774),
+    float3(0.5774, 0.5774, -0.5774),
+    float3(0.5774, -0.5774, 0.5774),
+    float3(0.5774, -0.5774, -0.5774),
+
+    float3(-0.5774, 0.5774, 0.5774),
+    float3(-0.5774, 0.5774, -0.5774),
+    float3(-0.5774, -0.5774, 0.5774),
+    float3(-0.5774, -0.5774, -0.5774),
+
+    float3(0.0, 0.0,  1.0),
+    float3(0.0, 0.0,  -1.0),
+    float3(0.0, 1.0,  0.0),
+    float3(0.0, -1.0, 0.0),
+
+    float3(1.0, 0.0, 0.0),
+    float3(-1.0, 0.0, 0.0),
+};
+
+
+
+float lengthSqr(float3 delta)
+{
+    return dot(delta, delta);
+}
+
+float lrp(float a, float b, float t)
+{
+    t = ((6.0*t - 15.0)*t + 10.0)*t*t*t;
+    return a + (b - a) * t;
+}
+
+float hash(uint num) {
+  num = num * 747796405u + 2891336453u;
+  num = ((num >> ((num >> 28u) + 4u)) ^ num) * 277803737u;
+  num = (num >> 22u) ^ num;
+  return float(num) * (1.0 / 4294967296.0);
+}
+
+float3 hashPoint(uint3 pos)
+{
+    uint seed = uint(pos.y * 65171993u + pos.x * 11591131u + pos.z * 77445077u);
+    float dy = hash(seed * 49031167u);
+    float dx = hash(seed * 33581413u); 
+    float dz = hash(seed * 61643333u);
+    return float3(pos) + float3(dx, dy, dz);
+}
+
+uint hashInt(uint minValue, uint maxValue, inout uint seed) {
+    return uint(lerp(float(minValue), float(maxValue) - 0.990, hash(seed)));
+}
+
+float3 hashVec(uint3 pos)
+{
+    uint seed = uint(pos.x * 11591131u + pos.y * 65171993u + pos.z * 77445077u);
+    return perlinDirs[hashInt(0, 14, seed)];
+}
+
+float worley(float3 pos)
+{
+    int3 cpos = int3(trunc(pos));
+    float dist = 1.0e15;
+
+    for (int dy = -1; dy < 2; dy++)
+    {
+        for (int dx = -1; dx < 2; dx++)
+        {
+            for (int dz = -1; dz < 2; dz++)
+            {
+                int3 delta = int3(dx, dy, dz);
+                float3 worleyPoint = hashPoint(cpos + delta);
+                float curDist = lengthSqr(worleyPoint - pos);
+                dist = min(curDist, dist);
+            }
+        }
+    }
+    
+    dist = sqrt(dist);
+    dist *= 0.7071;
+    dist = 1.0 - dist;
+    return dist;
+}
+
+float perlin(float3 pos)
+{
+    uint3 cpos = uint3(trunc(pos));
+    
+    float3 v1 = hashVec(cpos + uint3(0, 0, 0));
+    float3 v2 = hashVec(cpos + uint3(1, 0, 0));
+    float3 v3 = hashVec(cpos + uint3(0, 0, 1));
+    float3 v4 = hashVec(cpos + uint3(1, 0, 1));
+    
+    float3 v5 = hashVec(cpos + uint3(0, 1, 0));
+    float3 v6 = hashVec(cpos + uint3(1, 1, 0));
+    float3 v7 = hashVec(cpos + uint3(0, 1, 1));
+    float3 v8 = hashVec(cpos + uint3(1, 1, 1));
+
+    float3 d = pos - trunc(pos);
+
+    float3 t1 = float3(d.x,        d.y,  d.z);
+    float3 t2 = float3(d.x - 1.0,  d.y,  d.z);
+    float3 t3 = float3(d.x,        d.y,  d.z - 1.0);
+    float3 t4 = float3(d.x - 1.0,  d.y,  d.z - 1.0);
+    
+    float3 t5 = float3(d.x,        d.y - 1.0,  d.z);
+    float3 t6 = float3(d.x - 1.0,  d.y - 1.0,  d.z);
+    float3 t7 = float3(d.x,        d.y - 1.0,  d.z - 1.0);
+    float3 t8 = float3(d.x - 1.0,  d.y - 1.0,  d.z - 1.0);
+    
+    float c1 = dot(v1, t1);
+    float c2 = dot(v2, t2);
+    float c3 = dot(v3, t3);
+    float c4 = dot(v4, t4);
+    float c5 = dot(v5, t5);
+    float c6 = dot(v6, t6);
+    float c7 = dot(v7, t7);
+    float c8 = dot(v8, t8);
+
+    float bot = lrp(lrp(c1, c2, d.x), lrp(c3, c4, d.x), d.z);
+    float up = lrp(lrp(c5, c6, d.x), lrp(c7, c8, d.x), d.z);
+    float final = lrp(bot, up, d.y);
+    return (final + 1.0) * 0.5;
+}
+
+uint GetNumMorton(uint n)
+{
+    return (n & 1)
+        | ((n & 2) << 2)
+        | ((n & 4) << 4)
+        | ((n & 8) << 6)
+        | ((n & 16) << 8)
+        | ((n & 32) << 10)
+        | ((n & 64) << 12)
+        | ((n & 128) << 14)
+        | ((n & 256) << 16)
+        | ((n & 512) << 20);
+}
+
+uint GetPosMorton(uint3 pos)
+{
+    return (GetNumMorton(pos.x) << 2) | (GetNumMorton(pos.y) << 1) | GetNumMorton(pos.z);
+}
+
+bool IsVoxelOccupied(uint3 pos)
+{
+    uint index = GetPosMorton(pos);
+    uint div = index >> 5;
+    uint rem = index & 31;
+    return ((voxels[div] >> rem) & 1) != 0;
+}
+
+[numthreads(8,8,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    if (any(id >= resolution))
+        return;
+
+    if (!IsVoxelOccupied(id))
+    {
+        noise[id] = 0.0;
+        return;
+    }
+
+    float3 posWorley = id * invWorleyFreq + 1.0 + noiseVel * time;
+    float3 posPerlin = id * invPerlinFreq + 1.0 + noiseVel * time;
+    float t = lerp(worley(posWorley), perlin(posPerlin), worleyPerlinLerp); 
+    noise[id] = t;
+}
