@@ -7,7 +7,7 @@ public class Dispatcher : MonoBehaviour
     [Header("Values")]
     public float step;
 
-    [Range(0.0f, 1.0f)]
+    [Range(-1.0f, 1.0f)]
     public float schlick_k;
 
     [Range(0.0f, 10.0f)]

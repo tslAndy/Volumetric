@@ -8,7 +8,7 @@ RWTexture3D<float> noise;
 float time;
 float3 noiseVel;
 
-float invWorleyFreq, invPerlinFreq, worleyPerlinLerp;
+float invWorleyFreq, invPerlinFreq, cutoff;
 
 static float3 perlinDirs[14] =
 { 
@@ -133,7 +133,7 @@ float perlin(float3 pos)
     float bot = lrp(lrp(c1, c2, d.x), lrp(c3, c4, d.x), d.z);
     float up = lrp(lrp(c5, c6, d.x), lrp(c7, c8, d.x), d.z);
     float final = lrp(bot, up, d.y);
-    return (final + 1.0) * 0.5;
+    return final;
 }
 
 uint GetNumMorton(uint n)
@@ -175,8 +175,10 @@ void CSMain (uint3 id : SV_DispatchThreadID)
         return;
     }
 
+    // TODO: interpolation (linear) between noise values in sample point 
+
     float3 posWorley = id * invWorleyFreq + 1.0 + noiseVel * time;
     float3 posPerlin = id * invPerlinFreq + 1.0 + noiseVel * time;
-    float t = lerp(worley(posWorley), perlin(posPerlin), worleyPerlinLerp); 
-    noise[id] = t;
+    float t = worley(posWorley) * (1.0 - cutoff) + perlin(posPerlin) * cutoff; 
+    noise[id] = max(t, 0.0);
 }

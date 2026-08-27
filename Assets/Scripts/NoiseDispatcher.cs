@@ -8,12 +8,12 @@ public class NoiseDispatcher : MonoBehaviour
     public int boxResolution;
     public Vector3 noiseVel;
 
-    [Range(0.01f, 10.0f)]
+    [Range(0.01f, 50.0f)]
     public float perlinSize,
         worleySize;
 
     [Range(0.0f, 1.0f)]
-    public float worleyPerlinLerp;
+    public float cutoff;
 
     [Header("Other")]
     public GameObject model;
@@ -52,7 +52,7 @@ public class NoiseDispatcher : MonoBehaviour
         // can be moved to start if not changed during runtime
         shader.SetFloat("invPerlinFreq", 1.0f / perlinSize);
         shader.SetFloat("invWorleyFreq", 1.0f / worleySize);
-        shader.SetFloat("worleyPerlinLerp", worleyPerlinLerp);
+        shader.SetFloat("cutoff", cutoff);
         shader.SetVector("noiseVel", noiseVel);
 
         shader.SetFloat("time", Time.time);

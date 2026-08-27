@@ -15,7 +15,7 @@ float4x4 cameraMatrix;
 uint2 resolution;
 
 float boxSize;
-uint boxResolution;
+int boxResolution;
 
 float schlick_k;
 float scatter;
@@ -44,15 +44,72 @@ float hash(inout uint seed) {
   return float(num) * (1.0 / 4294967296.0);
 }
 
-uint pixelSeed(uint2 id)
+uint GetPixelSeed(uint2 id)
 {
     return uint(id.y * 65171993u + id.x * 11591131u);
 }
 
-float schlick(float ang_cos) 
+float GetSchlick(float ang_cos) 
 {
     return (1.0 - schlick_k * schlick_k) / 
     (4.0 * PI * (1.0 - schlick_k * ang_cos) * (1.0 - schlick_k * ang_cos));
+}
+
+int3 GetCellPosInt(float3 worldPos)
+{
+    return int3(trunc(worldPos / boxSize * boxResolution));
+}
+
+float3 GetCellPosFloat(float3 worldPos)
+{
+    return worldPos / boxSize * boxResolution;
+}
+
+float SampleNoise(float3 worldPos)
+{
+    float3 cPosFloat = GetCellPosFloat(worldPos);
+    float3 cPosDelta = cPosFloat - trunc(cPosFloat);
+
+    int3 cPosInt = GetCellPosInt(worldPos);
+    cPosInt.x += (cPosDelta.x <= 0.5) ? -1 : 0;
+    cPosInt.y += (cPosDelta.y <= 0.5) ? -1 : 0;
+    cPosInt.z += (cPosDelta.z <= 0.5) ? -1 : 0;
+
+    int3 cPosA = int3(cPosInt.x,     cPosInt.y,  cPosInt.z);
+    int3 cPosB = int3(cPosInt.x + 1, cPosInt.y,  cPosInt.z);
+    int3 cPosC = int3(cPosInt.x,     cPosInt.y,  cPosInt.z + 1);
+    int3 cPosD = int3(cPosInt.x + 1, cPosInt.y,  cPosInt.z + 1);
+
+    int3 cPosE = int3(cPosInt.x,     cPosInt.y + 1,  cPosInt.z);
+    int3 cPosF = int3(cPosInt.x + 1, cPosInt.y + 1,  cPosInt.z);
+    int3 cPosG = int3(cPosInt.x,     cPosInt.y + 1,  cPosInt.z + 1);
+    int3 cPosH = int3(cPosInt.x + 1, cPosInt.y + 1,  cPosInt.z + 1);
+
+    cPosA = min(max(cPosA, 0), boxResolution - 1);
+    cPosB = min(max(cPosB, 0), boxResolution - 1);
+    cPosC = min(max(cPosC, 0), boxResolution - 1);
+    cPosD = min(max(cPosD, 0), boxResolution - 1);
+
+    cPosE = min(max(cPosE, 0), boxResolution - 1);
+    cPosF = min(max(cPosF, 0), boxResolution - 1);
+    cPosG = min(max(cPosG, 0), boxResolution - 1);
+    cPosH = min(max(cPosH, 0), boxResolution - 1);
+
+    float valA = noise[cPosA];
+    float valB = noise[cPosB];
+    float valC = noise[cPosC];
+    float valD = noise[cPosD];
+
+    float valE = noise[cPosE];
+    float valF = noise[cPosF];
+    float valG = noise[cPosG];
+    float valH = noise[cPosH];
+
+    float3 d = cPosFloat - float3(cPosA) - 0.5; 
+    float bot = lerp(lerp(valA, valB, d.x), lerp(valC, valD, d.x), d.z);
+    float up =  lerp(lerp(valE, valF, d.x), lerp(valG, valH, d.x), d.z);
+    float final = lerp(bot, up, d.y);
+    return final;
 }
 
 float3 TraceLight(float3 pos, float3 mainDir)
@@ -60,7 +117,6 @@ float3 TraceLight(float3 pos, float3 mainDir)
     uint lightsCount, _;
     lights.GetDimensions(lightsCount, _);
     
-    float invPos = 1.0 / boxSize * boxResolution;
 
     float3 accum = 0.0;
     for (int i = 0; i < lightsCount; i++)
@@ -76,19 +132,19 @@ float3 TraceLight(float3 pos, float3 mainDir)
             if (transparency < DIM_CUTOFF)
                 break;
 
-            int3 cpos = int3(trunc(tempPos * invPos));
+            int3 cpos = GetCellPosInt(tempPos);
             if (any(cpos < 0) || any(cpos >= boxResolution))
                 break;
 
             if (lengthSqr(light.pos - tempPos) < step * step)
                 break;
 
-            transparency *= exp(-step * noise[cpos] * scatter);
+            transparency *= exp(-step * SampleNoise(tempPos) * scatter);
             tempPos += dir * step;
         }
 
         float distFactor = 2.0 / (lengthSqr(light.pos - tempPos) + 1.0);
-        float3 schlickFactor = schlick(dot(mainDir, dir));
+        float3 schlickFactor = GetSchlick(dot(mainDir, dir));
         
         accum += transparency * light.intensity * distFactor * schlickFactor * light.color;
     }
@@ -96,19 +152,19 @@ float3 TraceLight(float3 pos, float3 mainDir)
     return accum;
 }
 
+
+
 [numthreads(8,8,1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
     if (any(id.xy >= resolution))
         return;
 
-    uint seed = pixelSeed(id.xy);
+    uint seed = GetPixelSeed(id.xy);
     
     float3 pos = cameraPosition;
     float3 dir = mul(cameraMatrix, float4(id.xy + float2(0.5, 0.5), 1.0, 1.0));
     float dist = 0.0;
-
-    float invPos = 1.0 / boxSize * boxResolution;
 
     float transparency = 1.0;
     float3 accum = 0.0;
@@ -124,7 +180,7 @@ void CSMain (uint3 id : SV_DispatchThreadID)
         pos += dir * step;
         dist += step;
 
-        int3 cpos = int3(trunc(pos * invPos));
+        int3 cpos = GetCellPosInt(pos);
         if (any(cpos < 0) || any(cpos >= boxResolution))
             continue;
 
@@ -135,7 +191,7 @@ void CSMain (uint3 id : SV_DispatchThreadID)
         float3 randOffset = hash(seed) * step * dir;
         float3 light = step * TraceLight(pos + randOffset, dir);
         accum += transparency * light;
-        transparency *= exp(-step * noise[cpos]);
+        transparency *= exp(-step * SampleNoise(pos));
     }
 
     result[id.xy] = float4(accum, 1.0);
