@@ -408,13 +408,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 512100456}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.0007199997, y: -0.0014890775, z: 0.0034565176, w: 0.99999267}
-  m_LocalPosition: {x: 3.95, y: 3.62, z: 3.94}
+  m_LocalRotation: {x: 0.23119125, y: -0.1045582, z: -0.39858946, w: 0.8813312}
+  m_LocalPosition: {x: 4, y: 4, z: 4}
   m_LocalScale: {x: 3.7195802, y: 3.7195802, z: 3.7195802}
   m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0.083, y: -0.17, z: 0.396}
+  m_LocalEulerAnglesHint: {x: 18.915, y: -22.932, z: -52.541}
 --- !u!1 &705507993
 GameObject:
   m_ObjectHideFlags: 0
@@ -597,7 +597,7 @@ Transform:
   m_GameObject: {fileID: 963194225}
   serializedVersion: 2
   m_LocalRotation: {x: 0.14887667, y: -0.4223823, z: 0.070906475, w: 0.8912919}
-  m_LocalPosition: {x: 9.12, y: 6.55, z: -0.88}
+  m_LocalPosition: {x: 11.84, y: 7.76, z: -3.1}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -636,7 +636,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   boxSize: 8
-  boxResolution: 128
+  boxResolution: 64
   noiseVel: {x: 0.2, y: 0, z: 0}
   perlinSize: 20
   worleySize: 20
