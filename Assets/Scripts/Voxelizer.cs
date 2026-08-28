@@ -118,35 +118,34 @@ public class Voxelizer
         {
             for (int z = 0; z < boxResolution; z++)
             {
+                Norm lastFlag = Norm.None;
+                int lastCoord = -1;
+
                 for (int y = 0; y < boxResolution; y++)
                 {
-                    bool foundDown = false,
-                        foundUp = false;
+                    Norm curFlag = flags[GetMorton(new Vector3Int(x, y, z))];
 
-                    for (int ty = y; ty >= 0; ty--)
+                    if (curFlag == Norm.None)
+                        continue;
+
+                    if ((curFlag & Norm.Up) != 0 && (lastFlag & Norm.Down) != 0)
                     {
-                        Norm flag = flags[GetMorton(new Vector3Int(x, ty, z))];
-                        if ((flag & Norm.Down) != 0)
+                        for (int ty = lastCoord; ty <= y; ty++)
                         {
-                            foundDown = true;
-                            break;
+                            int index = GetMorton(new Vector3Int(x, ty, z));
+                            voxels[index >> 5] |= 1 << (index & 31);
                         }
                     }
 
-                    for (int ty = y; ty < boxResolution; ty++)
+                    if ((curFlag & Norm.Down) != 0)
                     {
-                        Norm flag = flags[GetMorton(new Vector3Int(x, ty, z))];
-                        if ((flag & Norm.Up) != 0)
-                        {
-                            foundUp = true;
-                            break;
-                        }
+                        lastFlag = curFlag;
+                        lastCoord = y;
                     }
-
-                    if (foundUp && foundDown)
+                    else
                     {
-                        int index = GetMorton(new Vector3Int(x, y, z));
-                        voxels[index >> 5] |= 1 << (index & 31);
+                        lastFlag = Norm.None;
+                        lastCoord = -1;
                     }
                 }
             }

@@ -106,6 +106,7 @@ float SampleNoise(float3 worldPos)
     float valH = noise[cPosH];
 
     float3 d = cPosFloat - float3(cPosA) - 0.5; 
+    d = max(d, 0.0);
     float bot = lerp(lerp(valA, valB, d.x), lerp(valC, valD, d.x), d.z);
     float up =  lerp(lerp(valE, valF, d.x), lerp(valG, valH, d.x), d.z);
     float final = lerp(bot, up, d.y);
