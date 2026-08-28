@@ -113,7 +113,7 @@ float SampleNoise(float3 worldPos)
     return final;
 }
 
-float3 TraceLight(float3 pos, float3 mainDir)
+float3 TraceLight(float3 pos, float3 mainDir, inout uint seed)
 {
     uint lightsCount, _;
     lights.GetDimensions(lightsCount, _);
@@ -140,7 +140,8 @@ float3 TraceLight(float3 pos, float3 mainDir)
             if (lengthSqr(light.pos - tempPos) < step * step)
                 break;
 
-            transparency *= exp(-step * SampleNoise(tempPos) * scatter);
+            float3 randOffset = hash(seed) * step * dir;
+            transparency *= exp(-step * SampleNoise(tempPos + randOffset) * scatter);
             tempPos += dir * step;
         }
 
@@ -190,7 +191,7 @@ void CSMain (uint3 id : SV_DispatchThreadID)
             continue;
 
         float3 randOffset = hash(seed) * step * dir;
-        float3 light = step * TraceLight(pos + randOffset, dir);
+        float3 light = step * TraceLight(pos + randOffset, dir, seed);
         accum += transparency * light;
         transparency *= exp(-step * SampleNoise(pos));
     }
