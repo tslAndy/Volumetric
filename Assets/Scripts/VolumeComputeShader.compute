@@ -191,8 +191,9 @@ void CSMain (uint3 id : SV_DispatchThreadID)
             continue;
 
         float3 randOffset = hash(seed) * step * dir;
-        float3 light = step * TraceLight(pos + randOffset, dir, seed);
-        accum += transparency * light;
+        float3 light = TraceLight(pos + randOffset, dir, seed);
+        float  density = SampleNoise(pos);
+        accum += transparency * light * density * step;
         transparency *= exp(-step * SampleNoise(pos));
     }
 

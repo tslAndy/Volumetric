@@ -133,7 +133,7 @@ float perlin(float3 pos)
     float bot = lrp(lrp(c1, c2, d.x), lrp(c3, c4, d.x), d.z);
     float up = lrp(lrp(c5, c6, d.x), lrp(c7, c8, d.x), d.z);
     float final = lrp(bot, up, d.y);
-    return final;
+    return final * 0.5 + 0.5;
 }
 
 uint GetNumMorton(uint n)
